@@ -5,21 +5,27 @@ from controller_command import ControllerCommand, UUID_NOTIFY, UUID_CMD_RESPONSE
 from dsu_server import main_dsu
 import logging
 import sys
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
 # Check if the operating system is Windows
 if (os.name != 'nt'):
     logger.error("This application is only supported on Windows.")
     sys.exit(1)
+
 # Read the configuration from config.ini
 config = Config().getConfig()
+
 manufact = {
     "id": 0x0553,  # Nintendo Co., Ltd. (https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/)
     "data-prefix": bytes([0x01, 0x00, 0x03, 0x7e, 0x05])
   # Manufacturer data prefix for Joy-Con (I hope this prefix is correct, and it same for everyone)
 }
+
 clients = []  # List to hold connected clients
+
 # Function to scan for controllers
 async def scan_joycons():
     device_controller = None
@@ -62,34 +68,28 @@ async def main_game_input(client, controllerName, orientation, config):
             
             await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the system
             
-    except Exception as e:
-        logger.error(f"Error in main game input loop: {e}")
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Interrupting main game input...")
     finally:
-        logger.info(f"Main game input loop ended for {controllerName} Joy-Con")
+        logger.info(f"Stopping main game input for {controllerName} Joy-Con...")
 
-# Function to initialize and connect to a controller
-async def init_controller(controllerName, side, orientation, controller_type):
-    device = await scan_joycons()
-    
-    if device:
+# Function to initialize the controller connection
+async def init_controller(controllerName, controllerType, orientation, setting):
+    joycon_device = await scan_joycons()
+    if joycon_device:
+        logger.info(f"Connecting to {controllerName} {controllerType} Joy-Con...")
+        client = BleakClient(joycon_device.address)
         try:
-            client = BleakClient(device.address)
             await client.connect()
+            clients.append(client)  # Add to the list of connected clients
+            logger.info(f"{controllerName} {controllerType} Joy-Con connected.")
             
-            if client.is_connected:
-                logger.info(f"Connected to {side} {controllerName}")
-                clients.append(client)  # Add client to the list
-                
-                # Initialize controller commands
-                await initSendControllerCmd(client, controllerName)
-                
-                # Start the main game input loop
-                if side == "Left":
-                    asyncio.create_task(main_game_input(client, "Left", orientation, config))
-                else:
-                    asyncio.create_task(main_game_input(client, "Right", orientation, config))
-        else:
-            logger.error("Failed to connect to controller.")
+            await initSendControllerCmd(client, controllerName)
+            
+            # Start the main game input loop
+            await main_game_input(client, f"{controllerName} {controllerType}", orientation, config)
+        except Exception as e:
+            logger.error(f"Failed to connect to {controllerName} {controllerType} Joy-Con: {e}")
     else:
         logger.error("Controller not found.")
 
@@ -127,7 +127,7 @@ async def main():
             await init_controller("Joy-Con", "Left", orientation, 0)
             await init_controller("Joy-Con", "Right", orientation, 0)
         
-        if config['enable_dsu'] == True :
+        if config['enable_dsu']:
             main_dsu()
         
         logger.info("🟢 Connection established successfully! Your Joy-Con is now ready to use.")
