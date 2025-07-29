@@ -5,27 +5,21 @@ from controller_command import ControllerCommand, UUID_NOTIFY, UUID_CMD_RESPONSE
 from dsu_server import main_dsu
 import logging
 import sys
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
-
 # Check if the operating system is Windows
 if (os.name != 'nt'):
     logger.error("This application is only supported on Windows.")
     sys.exit(1)
-
 # Read the configuration from config.ini
 config = Config().getConfig()
-
 manufact = {
     "id": 0x0553,  # Nintendo Co., Ltd. (https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/)
     "data-prefix": bytes([0x01, 0x00, 0x03, 0x7e, 0x05])
   # Manufacturer data prefix for Joy-Con (I hope this prefix is correct, and it same for everyone)
 }
-
 clients = []  # List to hold connected clients
-
 # Function to scan for controllers
 async def scan_joycons():
     device_controller = None
@@ -36,54 +30,61 @@ async def scan_joycons():
         if not data:
             return
         if data.startswith(manufact["data-prefix"]):
-            if not device_controller:
-                logger.info(f"Controller with address: {device.address} found.")
-                device_controller = device
-
-    scanner = BleakScanner(callback)
+            logger.info(f"Joy-Con found: {device.name} - {device.address}")
+            device_controller = device
+            
+    logger.info("Scanning for available controllers...")
+    scanner = BleakScanner(detection_callback=callback)
     await scanner.start()
-    while True:
-        if device_controller:
-            break
-        await asyncio.sleep(0.5)
+    await asyncio.sleep(10)  # Scan for 10 seconds
     await scanner.stop()
+    
     return device_controller
 
-# Connect the controller and attribute to a notification handler
-async def connect(device_controller):
-    client = BleakClient(device_controller)
+# Function to handle main game input loop
+async def main_game_input(client, controllerName, orientation, config):
+    controllerCommand = ControllerCommand()
+    
     try:
-        await client.connect()
-        if client.is_connected:
-            return client
-        else:
-            logger.error("Failed to connect.")
-            return None
+        logger.info(f"Starting main game input loop for {controllerName} Joy-Con...")
+        
+        while client.is_connected:
+            # Read sensor data
+            try:
+                response = await controllerCommand.send_command(client, "JOY2_GET_SENSOR_DATA")
+                if response:
+                    # Process the response data here
+                    # This is where you would interpret the sensor data and send it to your DSU server
+                    pass
+            except Exception as e:
+                logger.error(f"Error reading sensor data: {e}")
+                break
+            
+            await asyncio.sleep(0.01)  # Small delay to prevent overwhelming the system
+            
     except Exception as e:
-        logger.error(f"Connection error: {e}")
-        return None
+        logger.error(f"Error in main game input loop: {e}")
+    finally:
+        logger.info(f"Main game input loop ended for {controllerName} Joy-Con")
 
-# Function to handle data
-async def notification_handler(sender, data):
-    logger.debug(f"Data from {sender}: {data.hex()}")
-
-async def init_controller(controller_type, controller_mode, orientation, controller_config):
-    device_controller = await scan_joycons()
-    if device_controller:
-        client = await connect(device_controller)
-        if client:
-            clients.append(client)  # Add client to the list
-            await client.start_notify(UUID_NOTIFY, notification_handler)
-            logger.info(f"{controller_type} {controller_mode} connected")
-            await initSendControllerCmd(client, controller_type)
-            from game_input import main_game_input  # Import here to avoid circular import
-            if controller_config == 0:
-                if controller_mode == "Left":
-                    asyncio.create_task(main_game_input(client, "Left", orientation, config))
-                else:
-                    asyncio.create_task(main_game_input(client, "Right", orientation, config))
-            else:
-                if controller_config == 1:
+# Function to initialize and connect to a controller
+async def init_controller(controllerName, side, orientation, controller_type):
+    device = await scan_joycons()
+    
+    if device:
+        try:
+            client = BleakClient(device.address)
+            await client.connect()
+            
+            if client.is_connected:
+                logger.info(f"Connected to {side} {controllerName}")
+                clients.append(client)  # Add client to the list
+                
+                # Initialize controller commands
+                await initSendControllerCmd(client, controllerName)
+                
+                # Start the main game input loop
+                if side == "Left":
                     asyncio.create_task(main_game_input(client, "Left", orientation, config))
                 else:
                     asyncio.create_task(main_game_input(client, "Right", orientation, config))
@@ -94,8 +95,10 @@ async def init_controller(controller_type, controller_mode, orientation, control
 
 async def initSendControllerCmd(client, controllerName):
     controllerCommand = ControllerCommand()
+    
     if(controllerName == "Joy-Con"):
         await controllerCommand.send_command(client, "JOY2_CONNECTED_VIBRATION")
+        
         # Convert binary string (e.g., "0101") to hexadecimal string (e.g., "5")
         led_player = config['led_player']
         if len(led_player) != 4 or not all(c in '01' for c in led_player):
@@ -107,21 +110,22 @@ async def initSendControllerCmd(client, controllerName):
 
 async def main():
     try:
-        if(not config['orientation'] == 0 and not config['orientation'] == 1):
+        orientation = config['orientation']
+        if not (orientation == 0 or orientation == 1):
             logger.warning("Invalid orientation in config.ini. Please set 'orientation' to 0 (Vertical) or 1 (Horizontal).\nDefaulting to vertical.")
-            config['orientation'] = 0  # Default to vertical if invalid
+            orientation = 0  # Default to vertical if invalid
         
         if config['controller'] == 0:
-            await init_controller("Joy-Con", "Left", config['orientation'], 0)
-            await init_controller("Joy-Con", "Right", config['orientation'], 0)
+            await init_controller("Joy-Con", "Left", orientation, 0)
+            await init_controller("Joy-Con", "Right", orientation, 0)
         elif config['controller'] == 1:
-            await init_controller("Joy-Con", "Left", config['orientation'], 1)
+            await init_controller("Joy-Con", "Left", orientation, 1)
         elif config['controller'] == 2:
-            await init_controller("Joy-Con", "Right", config['orientation'], 2)
+            await init_controller("Joy-Con", "Right", orientation, 2)
         else:
             logger.warning("Invalid controller in config.ini. Please set 'controller' to 0, 1, or 2.\nDefaulting to both Joy-Cons.")
-            await init_controller("Joy-Con", "Left", config['orientation'], 0)
-            await init_controller("Joy-Con", "Right", config['orientation'], 0)
+            await init_controller("Joy-Con", "Left", orientation, 0)
+            await init_controller("Joy-Con", "Right", orientation, 0)
         
         if config['enable_dsu'] == True :
             main_dsu()
