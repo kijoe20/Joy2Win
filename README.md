@@ -28,11 +28,17 @@ This project allows you to connect your **Nintendo Switch 2 Joy-Con** controller
 4. Configure vJoy:
     - Open "Configure vJoy" from Start Menu
     - Select Device #1
-    - Check "Enable vJoy"  
+3. Install vJoy driver and configure it:
+    - Download from: https://sourceforge.net/projects/vjoystick/
+    - Install with default settings
+4. Configure vJoy:
+    - Open "Configure vJoy" from Start Menu
+    - Select Device #1
+    - Check "Enable vJoy"
     - Set "Number of Buttons" to 24 or higher
     - Configure axes (X, Y, Z, RX, RY, RZ) as needed
     - Click "Apply"
-    - Restart your computer
+5. Restart your computer
 
 5. **Easy Start**: Double-click `Start Joy-Con GUI.bat` or run:
     ```bash
