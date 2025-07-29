@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""
-Joy-Con 2 Windows - GUI Launcher
-Simple launcher script for the Joy-Con GUI application
-"""
-
-import sys
 import os
+import tkinter as tk
+from tkinter import messagebox
 
 def check_dependencies():
     """Check if required dependencies are installed"""
@@ -38,6 +34,21 @@ def check_dependencies():
         
     return True
 
+def show_confirmation_dialog(title, message):
+    """Show a confirmation dialog using tkinter"""
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    result = messagebox.askyesno(title, message)
+    root.destroy()
+    return result
+
+def show_info_dialog(title, message):
+    """Show an info dialog using tkinter"""
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    messagebox.showinfo(title, message)
+    root.destroy()
+
 def main():
     print("🎮 Joy-Con 2 Windows - Starting GUI...")
     
@@ -47,13 +58,20 @@ def main():
         print("   GUI can be viewed for demonstration, but Joy-Con connection")
         print("   requires Windows with vJoy driver installed.")
         print("")
-        response = input("Continue anyway? (y/N): ")
-        if response.lower() != 'y':
+        
+        # Replace input() with GUI dialog
+        if not show_confirmation_dialog(
+            "Platform Warning", 
+            "This application is designed for Windows.\n\n"
+            "GUI can be viewed for demonstration, but Joy-Con connection "
+            "requires Windows with vJoy driver installed.\n\n"
+            "Continue anyway?"
+        ):
             return
         
     # Check dependencies
     if not check_dependencies():
-        input("Press Enter to exit...")
+        show_info_dialog("Dependencies Missing", "Please install the missing dependencies and try again.")
         return
         
     # Import and run the GUI
@@ -63,10 +81,10 @@ def main():
     except ImportError as e:
         print(f"❌ Error importing GUI: {e}")
         print("Make sure all files are in the same directory.")
-        input("Press Enter to exit...")
+        show_info_dialog("Import Error", f"Error importing GUI: {e}\n\nMake sure all files are in the same directory.")
     except Exception as e:
         print(f"❌ Error starting GUI: {e}")
-        input("Press Enter to exit...")
+        show_info_dialog("Startup Error", f"Error starting GUI: {e}")
 
 if __name__ == "__main__":
     main()
