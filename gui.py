@@ -208,7 +208,8 @@ class JoyConGUI:
             filetypes=[("INI files", "*.ini"), ("All files", "*.*")]
         )
         if filename:
-            # TODO: Implement loading from custom file
+# TODO: Implement loading from custom file
+            messagebox.showerror("Not implemented", "Loading from custom file is not yet implemented")
             self.log_message(f"Loading configuration from {filename}")
             
     def clear_log(self):
